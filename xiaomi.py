@@ -1,4 +1,49 @@
-import requests,json,time,base64,binascii,hashlib,datetime,sys
+import requests,json,time,base64,binascii,hashlib,datetime,random
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_v1_5
+
+# 随机字符
+def random_str(length):
+    s = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()-=_+~`{}[]|:<>?/.'
+    return ''.join(random.choice(s) for _ in range(length))
+
+# AES加密
+def aes_encrypt(key,data):
+    iv = '0102030405060708'.encode('utf-8')
+    cipher = AES.new(key.encode('utf-8'),AES.MODE_CBC,iv)
+    padded_data = pad(data.encode('utf-8'),AES.block_size,style='pkcs7')
+    ciphertext = cipher.encrypt(padded_data)
+    return base64.b64encode(ciphertext).decode('utf-8')
+
+# RSA加密
+def rsa_encrypt(key,data):
+    public_key = RSA.import_key(key)
+    cipher = PKCS1_v1_5.new(public_key)
+    ciphertext = cipher.encrypt(base64.b64encode(data.encode('utf-8')))
+    return base64.b64encode(ciphertext).decode('utf-8')
+
+# 获取Token
+def get_token():
+    key = random_str(16)
+    public_key = """-----BEGIN PUBLIC KEY-----
+    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArxfNLkuAQ/BYHzkzVwtu
+    g+0abmYRBVCEScSzGxJIOsfxVzcuqaKO87H2o2wBcacD3bRHhMjTkhSEqxPjQ/FE
+    XuJ1cdbmr3+b3EQR6wf/cYcMx2468/QyVoQ7BADLSPecQhtgGOllkC+cLYN6Md34
+    Uii6U+VJf0p0q/saxUTZvhR2ka9fqJ4+6C6cOghIecjMYQNHIaNW+eSKunfFsXVU
+    +QfMD0q2EM9wo20aLnos24yDzRjh9HJc6xfr37jRlv1/boG/EABMG9FnTm35xWrV
+    R0nw3cpYF7GZg13QicS/ZwEsSd4HyboAruMxJBPvK3Jdr4ZS23bpN0cavWOJsBqZ
+    VwIDAQAB
+    -----END PUBLIC KEY-----"""
+    data = '{"type":0,"startTs":'+str(round(time.time()*1000))+',"endTs":'+str(round(time.time()*1000))+',"env":{"p1":"","p2":"","p3":"","p4":"","p5":"","p6":"","p7":"","p8":"","p9":"","p10":"","p11":"","p12":"","p13":"","p14":"","p15":"","p16":"","p17":"","p18":"","p19":5,"p20":"","p21":"","p22":5,"p23":"","p24":"","p25":"","p26":"","p28":"","p29":"","p30":"","p31":"","p32":"","p33":"","p34":""},"action":{"a1":[],"a2":[],"a3":[],"a4":[],"a5":[],"a6":[],"a7":[],"a8":[],"a9":[],"a10":[],"a11":[],"a12":[],"a13":[],"a14":[]},"force":false,"talkBack":false,"uid":"'+random_str(27)+'","nonce":{"t":'+str(round(time.time()))+',"r":'+str(round(time.time()))+'},"version":"2.0","scene":"GROW_UP_CHECKIN"}'
+    s = rsa_encrypt(public_key,key)
+    d = aes_encrypt(key,data)
+    url='https://verify.sec.xiaomi.com/captcha/v2/data?k=3dc42a135a8d45118034d1ab68213073&locale=zh_CN'
+    data={'s':s,'d':d,'a':'GROW_UP_CHECKIN'}
+    result = requests.post(url=url,data=data).json()
+    if result['msg'] != '参数错误':
+        return result['data']['token']
 
 # 用户信息
 def info(cookie):
@@ -12,7 +57,7 @@ def check_in(cookie):
     result = requests.get(url=url,cookies=cookie).json()
     if result['entity']['checkin7DaysDetail'][datetime.date.today().weekday()] == 0:
         url = f'https://api.vip.miui.com/mtop/planet/vip/user/checkinV2'
-        data = {'miui_vip_ph':cookie['miui_vip_ph'],'token':'lUyu4a4aDS2xHr9Wm3RecATnT+1eNx9hP6T53vEQ3BK6fl0sqy3OaF7RPisuuHcEd16hgmBEOnYXhpa7HXjEX493lVmNr2KJ/ShoW8maSlBkHW2BwdRqQU19HLXcuvn7Ydfc3hP/sVLvj4qIJx+K7FwEZIHTqRFuGNzQlmMUSxZrBJ+e1Jjy2PGbpE44NI/jmbIRDcCJeieVcr6RbVoVj3ljnYZ6bRELiljNMDBumvg3Y77tXv4pDkkLpcGv2ngIdRcn60/uhviO0PxsOe1/gteRqcaYBpQSfGFMp1Dx1RQpMWLlNX5+0WZPGmupI6jE'}
+        data = {'miui_vip_ph':cookie['miui_vip_ph'],'token':get_token()}
         result = requests.post(url=url,cookies=cookie,data=data).json()
         if 'success' not in result['message']:
             print(f'签到失败: {result["message"]}')
@@ -46,8 +91,7 @@ def login(account,password):
     data = {'callback':'https://api.vip.miui.com/sts','_json':'true','user':account,'hash':Hash.upper(),'sid':'miui_vip','_sign':'ZJxpm3Q5cu0qDOMkKdWYRPeCwps=','_locale':'zh_CN'}
     Auth = json.loads(requests.post(url=url,headers=headers,data=data).text.replace('&&&START&&&',''))
     if Auth['description'] == '登录验证失败':
-        print('登陆验证失败')
-        sys.exit()
+        return 'Error'
     sha1.update(('nonce=' + str(Auth['nonce']) + '&' + Auth['ssecurity']).encode('utf-8'))
     clientSign = base64.encodebytes(binascii.a2b_hex(sha1.hexdigest().encode('utf-8'))).decode(encoding='utf-8').strip()
     nurl = Auth['location'] + '&_userIdNeedEncrypt=true&clientSign=' + clientSign
@@ -72,13 +116,15 @@ def main(account,password):
             break
         else:
             time.sleep(i)
-    if len(cookie) == 0:
-        print('Login failed')
+    if len(cookie) == 0 or cookie == 'Error':
+        print(f'{account}：登录失败')
     else:
-        for action in ['info','check_in','like','browse','carrot','check_status']:
+        for action in ['check_in','like','browse','carrot','check_status']:
             eval(f'{action}(cookie)')
 
 if __name__ == '__main__':
-    account = '123456789' # 账号
-    password = '123456789' # 密码
-    main(account,password)
+    # 多账号用逗号隔开
+    account = ['123456789'] # 账号
+    password = ['123456789'] # 密码
+    for i in range(len(account)):
+        main(account[i],password[i])
