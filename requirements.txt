@@ -1,0 +1,6 @@
+opencv-python
+toml
+requests
+PyExecJS
+pycryptodome
+pillow
